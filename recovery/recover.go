@@ -33,12 +33,12 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"math/rand"
 )
 
 var log = logging.Logger("recover")
@@ -175,7 +175,7 @@ func RecoverSealedFile(ctx context.Context, rp export.RecoveryParams, parallel u
 			randNum := rand.Intn(int(parallel) * 2)
 			//Control PC1 running interval
 			for {
-				if time.Now().Add(-time.Minute * 10).Add(time.Duration(randNum) * time.Second).After(p1LastTaskTime) {
+				if time.Now().Add(-time.Minute * 5).Add(time.Duration(randNum) * time.Second).After(p1LastTaskTime) {
 					break
 				}
 				<-time.After(p1LastTaskTime.Sub(time.Now()))
