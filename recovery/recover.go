@@ -159,7 +159,7 @@ func RecoverSealedFile(ctx context.Context, rp export.RecoveryParams, parallel u
 	if err != nil {
 		return xerrors.Errorf("Getting IDFromAddress err:", err)
 	}
-
+	limitP2 := make(chan bool, 2)
 	wg := &sync.WaitGroup{}
 	limiter := make(chan bool, parallel)
 	var p1LastTaskTime time.Time
@@ -175,7 +175,7 @@ func RecoverSealedFile(ctx context.Context, rp export.RecoveryParams, parallel u
 			randNum := rand.Intn(int(parallel) * 2)
 			//Control PC1 running interval
 			for {
-				if time.Now().Add(-time.Minute * 5).Add(time.Duration(randNum) * time.Second).After(p1LastTaskTime) {
+				if time.Now().Add(-time.Minute * 1).Add(time.Duration(randNum) * time.Second).After(p1LastTaskTime) {
 					break
 				}
 				<-time.After(p1LastTaskTime.Sub(time.Now()))
@@ -227,7 +227,7 @@ func RecoverSealedFile(ctx context.Context, rp export.RecoveryParams, parallel u
 			}
 			log.Infof("Complete PreCommit1, sector (%d)", sector.SectorNumber)
 
-			err = sealPreCommit2AndCheck(ctx, sb, sid, pc1o, sector.SealedCID.String())
+			err = sealPreCommit2AndCheck(ctx, sb, sid, pc1o, sector.SealedCID.String(), limitP2)
 			if err != nil {
 				log.Errorf("Sector (%d) , running PreCommit2  error: %v", sector.SectorNumber, err)
 			}
@@ -245,24 +245,27 @@ func RecoverSealedFile(ctx context.Context, rp export.RecoveryParams, parallel u
 	return nil
 }
 
-var pc2Lock sync.Mutex
+//var pc2Lock sync.Mutex
 
-func sealPreCommit2AndCheck(ctx context.Context, sb *ffiwrapper.Sealer, sid storage.SectorRef, phase1Out storage.PreCommit1Out, sealedCID string) error {
-	pc2Lock.Lock()
+func sealPreCommit2AndCheck(ctx context.Context, sb *ffiwrapper.Sealer, sid storage.SectorRef, phase1Out storage.PreCommit1Out, sealedCID string, limiter chan bool) error {
+	//pc2Lock.Lock()
+	limiter <- true
 	log.Infof("Start running PreCommit2, sector (%d)", sid.ID)
 
 	cids, err := sb.SealPreCommit2(ctx, sid, phase1Out)
 	if err != nil {
-		pc2Lock.Unlock()
+		//pc2Lock.Unlock()
+		<-limiter
 		return err
 	}
-	pc2Lock.Unlock()
+	//pc2Lock.Unlock()
 	log.Infof("Complete PreCommit2, sector (%d)", sid.ID)
-
 	//check CID with chain
 	if sealedCID != cids.Sealed.String() {
+		<-limiter
 		return xerrors.Errorf("sealed cid mismatching!!! (sealedCID: %v, newSealedCID: %v)", sealedCID, cids.Sealed.String())
 	}
+	<-limiter
 	return nil
 }
 
